@@ -1654,11 +1654,15 @@
         }
     },
     "dependencies": {
+        "@prisma/client": "^6.5.0",
         "formidable": "^3.5.2",
         "next": "^15.2.2",
         "openai": "^4.87.3",
         "pouchdb": "^9.0.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0"
+    },
+    "devDependencies": {
+        "prisma": "^6.5.0"
     }
 }

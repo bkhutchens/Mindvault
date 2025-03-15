@@ -1,16 +1,16 @@
 import OpenAI from "openai";
 import fs from "fs";
 import { IncomingForm } from "formidable";
+import { PrismaClient } from "@prisma/client";
 
 export const config = { api: { bodyParser: false } };
 
-// Your approved tags:
-const approvedTags = [
-  "Project", "Notes", "Reminder", "Idea", "Task", "Meeting",
-  "Question", "Personal", "Work", "List", "Event"
-];
+const prisma = new PrismaClient();
 
-let notes = [];
+const approvedTags = [
+  "Project", "Notes", "Reminder", "Idea", "Task",
+  "Meeting", "Question", "Personal", "Work", "List", "Event"
+];
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -20,10 +20,7 @@ export default async function handler(req, res) {
   const form = new IncomingForm({ keepExtensions: true });
 
   form.parse(req, async (err, fields, files) => {
-    if (err) {
-      console.error("Form parsing error:", err);
-      return res.status(500).json({ error: "Form parsing failed" });
-    }
+    if (err) return res.status(500).json({ error: "Form parsing failed" });
 
     if (!process.env.OPENAI_API_KEY) {
       console.error("Missing API key");
@@ -41,18 +38,15 @@ export default async function handler(req, res) {
 
       const transcription = transcriptionResponse.text;
 
-      // Clearly generate tags
       const tagPrompt = `
-      Available Tags: ${approvedTags.join(", ")}
+      Select up to 3 relevant tags from this list: ${approvedTags.join(", ")}.
       Note: "${transcription}"
-
-      Select clearly up to 3 relevant tags from above, separated by commas.
       `;
 
       const tagResponse = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "Choose up to 3 tags from the provided list that best describe the note." },
+          { role: "system", content: "Return exactly 3 tags from provided list, comma-separated." },
           { role: "user", content: tagPrompt },
         ],
         temperature: 0,
@@ -61,37 +55,33 @@ export default async function handler(req, res) {
 
       const tags = tagResponse.choices[0].message.content
         .split(",")
-        .map((tag) => tag.trim())
-        .filter((tag) => approvedTags.includes(tag));
-
-      // ✅ New Summary Generation (after tags):
-      const summaryPrompt = `
-        Summarize the following note clearly in 1-2 short sentences. Use the provided tags (${tags.join(", ")}) as context:
-
-        Note:
-        "${transcription}"
-      `;
+        .map(t => t.trim());
 
       const summaryResponse = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
-          { role: "system", content: "Summarize notes concisely based on tags provided." },
-          { role: "user", content: summaryPrompt },
+          {
+            role: "system",
+            content: "Summarize the following transcription concisely in one sentence using provided tags as context.",
+          },
+          {
+            role: "user",
+            content: `Tags: ${tags.join(", ")}\nTranscription: ${transcription}`,
+          },
         ],
-        temperature: 0.1,
+        temperature: 0.3,
         max_tokens: 60,
       });
 
       const summary = summaryResponse.choices[0].message.content.trim();
 
-      // Final note structure:
-      const note = {
-        id: Date.now().toString(),
-        transcription,
-        tags,
-        summary,
-        createdAt: new Date().toISOString(),
-      };
+      const note = await prisma.note.create({
+        data: { 
+          transcription, 
+          tags, 
+          summary 
+        },
+      });
 
       return res.status(200).json({ note });
     } catch (error) {
@@ -99,4 +89,4 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Transcription or summary failed." });
     }
   });
-};
+}
