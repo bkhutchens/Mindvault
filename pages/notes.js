@@ -30,18 +30,26 @@ export default function Notes() {
   }, []);
 
   const fetchNotes = async () => {
-    const res = await fetch("/api/notes");
-    const data = await res.json();
-    // Convert tags to array if stored as comma-separated string
-    const parsedNotes = data.notes.map((note) => ({
-      ...note,
-      tags:
-        typeof note.tags === "string"
-          ? note.tags.split(",").map((tag) => tag.trim())
-          : note.tags,
-    }));
-    setNotes(parsedNotes);
+    try {
+      const res = await fetch("/api/notes");
+      const data = await res.json();
+      if (!data.notes) {
+        console.error("API did not return notes:", data);
+        return; // Or handle the error appropriately
+      }
+      const parsedNotes = data.notes.map((note) => ({
+        ...note,
+        tags:
+          typeof note.tags === "string"
+            ? note.tags.split(",").map((tag) => tag.trim())
+            : note.tags,
+      }));
+      setNotes(parsedNotes);
+    } catch (error) {
+      console.error("Error fetching notes:", error);
+    }
   };
+  
 
   const deleteNote = async (id) => {
     await fetch("/api/deleteNote", {

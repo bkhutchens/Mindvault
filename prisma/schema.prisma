@@ -1,5 +1,4 @@
 // prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -15,9 +14,10 @@ model User {
   email         String?   @unique
   emailVerified DateTime?
   image         String?
+  password      String? // For custom email/password logins
   accounts      Account[]
   sessions      Session[]
-  notes         Note[] // add this line for the relation
+  notes         Note[]
 }
 
 model Account {
@@ -56,13 +56,12 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// Your existing Note model
 model Note {
   id            Int      @id @default(autoincrement())
   transcription String
   summary       String
-  tags          String // comma-separated tags
+  tags          String // Comma-separated tags
   createdAt     DateTime @default(now())
-  userId        String? // Link to the User model
+  userId        String? // Optional link to a user
   user          User?    @relation(fields: [userId], references: [id])
 }

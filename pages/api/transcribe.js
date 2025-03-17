@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import OpenAI from "openai";
 import { IncomingForm } from "formidable";
 import fs from "fs";
+import { getSession } from "next-auth/react";
 
 export const config = {
   api: { bodyParser: false },
@@ -16,6 +17,16 @@ export default async function handler(req, res) {
   const form = new IncomingForm({ keepExtensions: true });
 
   form.parse(req, async (err, fields, files) => {
+    const session = await getSession({ req });
+    const userId = session?.user?.id || null;
+    const note = await prisma.note.create({
+      data: {
+        transcription,
+        tags: tags.join(","),
+        summary,
+        userId,  // Associate the note with the user
+      },
+    });
     if (err) {
       console.error("Form parsing error:", err);
       return res.status(500).json({ error: "Form parsing failed." });

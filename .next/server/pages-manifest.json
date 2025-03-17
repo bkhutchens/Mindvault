@@ -2,8 +2,9 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/notes": "pages/notes.js",
+  "/login": "pages/login.js",
   "/api/auth/[...nextauth]": "pages/api/auth/[...nextauth].js",
-  "/api/notes": "pages/api/notes.js",
-  "/": "pages/index.js"
+  "/": "pages/index.js",
+  "/notes": "pages/notes.js",
+  "/api/notes": "pages/api/notes.js"
 }
