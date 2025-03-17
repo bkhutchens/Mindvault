@@ -27,6 +27,16 @@ export default NextAuth({
         if (!user) {
           throw new Error("No user found with that email");
         }
+        // If no password exists, log the internal error and show a custom message
+        if (!user.password) {
+          console.error(
+            "Attempted credentials login for account without a password (likely registered via Google):",
+            user.email
+          );
+          throw new Error(
+            "This account is registered through Google. Please sign in using Google or register a password."
+          );
+        }
         const isValid = await bcrypt.compare(credentials.password, user.password);
         if (!isValid) {
           throw new Error("Invalid password");
