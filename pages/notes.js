@@ -1,59 +1,83 @@
+// pages/notes.js
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import db from "../lib/pouchdb";
+import EditNoteModal from "../components/EditNoteModal";
 
-export default function NotesPage() {
+export default function Notes() {
+  const approvedTags = ["Project","Notes","Reminder","Idea","Task","Meeting","Question","Personal","Work","List","Event"];
   const [notes, setNotes] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [editingNote, setEditingNote] = useState(null);
 
   useEffect(() => {
-    loadNotes();
+    fetchNotes();
   }, []);
 
-  const loadNotes = async () => {
-    try {
-      const allDocs = await db.allDocs({ include_docs: true });
-      const data = allDocs.rows.map((row) => row.doc);
-      setNotes(data);
-    } catch (err) {
-      console.error("Failed to fetch notes:", err);
+  const fetchNotes = async () => {
+    const res = await fetch("/api/notes");
+    const data = await res.json();
+    data.notes.forEach(note => note.tags = typeof note.tags === 'string' ? note.tags.split(",") : note.tags);
+    setNotes(data.notes);
+  };
+
+  const deleteNote = async (id) => {
+    await fetch("/api/deleteNote", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setNotes(notes.filter(n => n.id !== id));
+  };
+
+  const handleSave = async (id, summary, tags) => {
+    const res = await fetch("/api/editNote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, summary, tags }),
+    });
+
+    const data = await res.json();
+    if (data.note) {
+      data.note.tags = typeof data.note.tags === 'string' ? data.note.tags.split(",") : data.note.tags;
+      setNotes(notes.map(n => (n.id === id ? data.note : n)));
+      setEditingNote(null);
+    } else {
+      alert("Error updating note!");
     }
   };
 
-  const filteredNotes = notes.filter((note) =>
-    note.text.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
-    <div style={styles.container}>
-      <h1>Your Notes</h1>
-      <input
-        type="text"
-        placeholder="Search notes..."
-        style={styles.searchBox}
-        value={searchQuery}
-        onChange={(e) => setSearchQuery(e.target.value)}
-      />
-
-      <div style={styles.notesContainer}>
-        {filteredNotes.map((note) => (
-          <div key={note._id} style={styles.noteCard}>
-            <p>{note.text}</p>
-          </div>
-        ))}
-      </div>
-
-      <Link href="/" style={styles.link}>
-        Go Back
+    <div className="p-4">
+      <Link href="/">
+        <button className="mb-4">← Back to Record</button>
       </Link>
+
+      <h1 className="text-2xl font-bold mb-4">Your Notes</h1>
+      
+      {notes.map(note => (
+        <div key={note.id} className="p-3 my-2 bg-gray-200 rounded">
+          <h3 className="font-semibold">{note.summary}</h3>
+          <small className="text-gray-600">{note.tags.join(", ")}</small>
+          <details className="mt-2">
+            <summary className="cursor-pointer font-medium">Full transcription</summary>
+            <p className="mt-2">{note.transcription}</p>
+          </details>
+          <button className="mr-2 mt-2 px-3 py-1 bg-blue-500 text-white rounded" onClick={() => setEditingNote(note)}>
+            Edit
+          </button>
+          <button className="mt-2 px-3 py-1 bg-red-500 text-white rounded" onClick={() => deleteNote(note.id)}>
+            Delete
+          </button>
+        </div>
+      ))}
+
+      {editingNote && (
+        <EditNoteModal
+          note={editingNote}
+          approvedTags={approvedTags}
+          onSave={handleSave}
+          onClose={() => setEditingNote(null)}
+        />
+      )}
     </div>
   );
 }
-
-const styles = {
-  container: { padding: "2rem" },
-  searchBox: { width: "100%", padding: "0.5rem", marginBottom: "1rem" },
-  notesContainer: { display: "grid", gap: "1rem" },
-  noteCard: { backgroundColor: "#f8f8f8", padding: "1rem", borderRadius: "8px" },
-  link: { marginTop: "2rem", textDecoration: "underline", color: "#0070f3" },
-};
