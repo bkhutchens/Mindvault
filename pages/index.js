@@ -1,17 +1,28 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import EditNoteModal from "../components/EditNoteModal";
 
 export default function Home() {
-  const [isRecording, setIsRecording] = useState(false);
+  const approvedTags = [
+    "Project", "Notes", "Reminder", "Idea", "Task",
+    "Meeting", "Question", "Personal", "Work", "List", "Event"
+  ];
+
   const [notes, setNotes] = useState([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const [editingNote, setEditingNote] = useState(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
   useEffect(() => { fetchNotes(); }, []);
 
   const fetchNotes = async () => {
-    const response = await fetch("/api/notes");
-    const data = await response.json();
-    setNotes(data.notes);
+    const res = await fetch('/api/notes');
+    const data = await res.json();
+    const parsedNotes = data.notes.map(note => ({
+      ...note,
+      tags: note.tags.split(",")
+    }));
+    setNotes(parsedNotes);
   };
 
   const startRecording = async () => {
@@ -19,8 +30,7 @@ export default function Home() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
-
-      mediaRecorderRef.current.ondataavailable = (event) => audioChunksRef.current.push(event.data);
+      mediaRecorderRef.current.ondataavailable = (e) => audioChunksRef.current.push(e.data);
       mediaRecorderRef.current.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         await transcribeAudio(audioBlob);
@@ -28,9 +38,7 @@ export default function Home() {
       };
       mediaRecorderRef.current.start();
       setIsRecording(true);
-    } catch (error) {
-      console.error("Microphone error:", error);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const stopRecording = () => {
@@ -43,65 +51,79 @@ export default function Home() {
     formData.append("file", audioBlob, "audio.webm");
     const response = await fetch("/api/transcribe", { method: "POST", body: formData });
     const data = await response.json();
-    if (data.note) setNotes((prev) => [data.note, ...prev]);
+  
+    if (data.note) {
+      if (typeof data.note.tags === 'string') {
+        data.note.tags = data.note.tags.split(",");
+      }
+      setNotes((prev) => [data.note, ...prev]);
+    } else {
+      alert(`Error in transcription: ${data.error}`);
+    }
   };
+  
 
   const deleteNote = async (id) => {
     await fetch("/api/deleteNote", {
       method: "DELETE",
-      body: JSON.stringify({ id }),
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
     });
-    setNotes((prev) => prev.filter(note => note.id !== id));
+    setNotes(notes.filter(n => n.id !== id));
   };
 
-  const editNote = async (id) => {
-    const newSummary = prompt("Edit summary:");
-    const newTags = prompt("Edit tags (comma-separated):");
-    if (!newSummary || !newTags) return;
 
-    const tagsArray = newTags.split(",").map(tag => tag.trim());
-
-    const response = await fetch("/api/editNote", {
-      method: "PUT",
-      body: JSON.stringify({ id, summary: newSummary, tags: tagsArray }),
+  const handleSave = async (id, summary, tags) => {
+    const res = await fetch("/api/editNote", {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, summary, tags }),
     });
-
-    const data = await response.json();
-
+    const data = await res.json();
+    
     if (data.note) {
-      setNotes(prev => prev.map(note => note.id === id ? data.note : note));
+      // Safely handle tags clearly
+      if (typeof data.note.tags === "string") {
+        data.note.tags = data.note.tags.split(",").map(tag => tag.trim());
+      }
+      setNotes(notes.map(n => (n.id === id ? data.note : n)));
+      setEditingNote(null);
     } else {
-      alert("Failed to edit note.");
+      alert("Error updating note!");
     }
   };
+  
 
   return (
-    <div style={{ padding: "2rem", textAlign: "center" }}>
-      <h1>MindVault.ai</h1>
-
+    <div className="p-4 text-center">
+      <h1 className="text-2xl font-bold">MindVault.ai</h1>
       {!isRecording ? (
         <button onClick={startRecording}>Start Recording</button>
       ) : (
         <button onClick={stopRecording}>Stop Recording</button>
       )}
 
-      {notes.map((note) => (
-        <div key={note.id} style={{ borderBottom: "1px solid #ccc", padding: "1rem" }}>
+      {notes.map(note => (
+        <div key={note.id} className="p-3 my-2 bg-gray-200 rounded">
           <h3>{note.summary}</h3>
-          <small>{Array.isArray(note.tags) ? note.tags.join(", ") : note.tags}</small>
-          <br />
-
-          <details style={{ marginTop: "0.5rem" }}>
-            <summary>View Transcription</summary>
+          <small>{note.tags.join(", ")}</small>
+          <details>
+            <summary>Full transcription</summary>
             <p>{note.transcription}</p>
           </details>
-
-          <button style={{ marginTop: "0.5rem" }} onClick={() => editNote(note.id)}>Edit Note</button>
-          <button style={{ marginTop: "0.5rem", marginLeft: "1rem" }} onClick={() => deleteNote(note.id)}>Delete Note</button>
+          <button onClick={() => setEditingNote(note)} className="mr-2">Edit</button>
+          <button onClick={() => deleteNote(note.id)}>Delete</button>
         </div>
       ))}
+
+      {editingNote && (
+        <EditNoteModal
+          note={editingNote}
+          approvedTags={approvedTags}
+          onSave={handleSave}
+          onClose={() => setEditingNote(null)}
+        />
+      )}
     </div>
   );
 }
